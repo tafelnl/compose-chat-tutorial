@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Icon
+import androidx.compose.material.IconButton
 import androidx.compose.material.Scaffold
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
@@ -28,7 +29,16 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
+import io.getstream.chat.android.client.ChatClient
+import io.getstream.chat.android.compose.ui.attachments.AttachmentFactory
+import io.getstream.chat.android.compose.ui.attachments.factory.AudioRecordAttachmentFactory
+import io.getstream.chat.android.compose.ui.attachments.factory.FileAttachmentFactory
+import io.getstream.chat.android.compose.ui.attachments.factory.MediaAttachmentFactory
+import io.getstream.chat.android.compose.ui.attachments.factory.UnsupportedAttachmentFactory
+import io.getstream.chat.android.compose.ui.attachments.factory.UploadAttachmentFactory
 import io.getstream.chat.android.compose.ui.components.composer.MessageInput
 import io.getstream.chat.android.compose.ui.components.messageoptions.defaultMessageOptionsState
 import io.getstream.chat.android.compose.ui.components.selectedmessage.SelectedMessageMenu
@@ -39,12 +49,35 @@ import io.getstream.chat.android.compose.ui.messages.list.MessageList
 import io.getstream.chat.android.compose.ui.theme.ChatTheme
 import io.getstream.chat.android.compose.ui.theme.StreamShapes
 import io.getstream.chat.android.compose.viewmodel.messages.AttachmentsPickerViewModel
+import io.getstream.chat.android.compose.viewmodel.messages.AudioPlayerViewModelFactory
 import io.getstream.chat.android.compose.viewmodel.messages.MessageComposerViewModel
 import io.getstream.chat.android.compose.viewmodel.messages.MessageListViewModel
 import io.getstream.chat.android.compose.viewmodel.messages.MessagesViewModelFactory
+import io.getstream.chat.android.core.internal.InternalStreamChatApi
+import io.getstream.chat.android.models.Attachment
 import io.getstream.chat.android.ui.common.state.messages.MessageMode
 import io.getstream.chat.android.ui.common.state.messages.list.SelectedMessageOptionsState
 import io.getstream.chat.android.ui.common.state.messages.list.SelectedMessageReactionsState
+
+@OptIn(InternalStreamChatApi::class)
+fun attachmentFactories(): List<AttachmentFactory> = listOf(
+    UploadAttachmentFactory(),
+    AudioRecordAttachmentFactory(
+        viewModelFactory = AudioPlayerViewModelFactory(
+            getAudioPlayer = { ChatClient.instance().audioPlayer },
+            getRecordingUri = { it.assetUrl ?: it.upload?.toUri()?.toString() },
+        ),
+        getCurrentUserId = { ChatClient.instance().getCurrentOrStoredUserId() },
+    ),
+    MediaAttachmentFactory(
+        skipEnrichUrl = false,
+        onContentItemClick = { _, _, _, _, _, _ ->
+        },
+    ),
+    FileAttachmentFactory(),
+    CustomAttachmentFactory,
+    UnsupportedAttachmentFactory,
+)
 
 class MessagesActivity4 : ComponentActivity() {
 
@@ -82,7 +115,8 @@ class MessagesActivity4 : ComponentActivity() {
                         myMessageBubble = RoundedCornerShape(16.dp),
                         otherMessageBubble = RoundedCornerShape(16.dp),
                         inputField = RectangleShape
-                    )
+                    ),
+                attachmentFactories = attachmentFactories()
             ) {
                 MyCustomUi()
             }
@@ -189,43 +223,69 @@ class MessagesActivity4 : ComponentActivity() {
 
     @Composable
     fun MyCustomComposer() {
-        MessageComposer( // 1 - Use our MessageComposer as the base component
-            modifier = Modifier
-                .fillMaxWidth()
-                .wrapContentHeight(),
-            viewModel = composerViewModel,
-            integrations = {}, // 2 - Remove integrations from the composer
-            input = { inputState ->// 3 - Add a custom message input
-                MessageInput(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(7f)
-                        .padding(start = 8.dp)
-                        .align(Alignment.CenterVertically),
-                    messageComposerState = inputState,
-                    onValueChange = { composerViewModel.setMessageInput(it) },
-                    onAttachmentRemoved = { composerViewModel.removeSelectedAttachment(it) },
-                    label = { // 4 - Override the label to show a custom icon and a text
-                        Row(
-                            Modifier.wrapContentWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Keyboard,
-                                contentDescription = null,
-                                tint = ChatTheme.colors.textLowEmphasis
-                            )
+        Row {
+            IconButton(
+                content = {
+                    Icon(
+                        painter = painterResource(id = io.getstream.chat.android.compose.R.drawable.stream_compose_ic_add),
+                        contentDescription = null,
+                        tint = ChatTheme.colors.primaryAccent,
+                    )
+                },
+                onClick = {
+                    val extraData = mapOf<String, Double>(
+                        "latitude" to 52.09083,
+                        "longitude" to 5.12222,
+                        "latitudeDouble" to 52.09083,
+                        "longitudeDouble" to 5.12222,
+                    )
+                    val attachments = listOf(Attachment(
+                        name = "Custom",
+                        type = CustomAttachmentType.CUSTOM,
+                        extraData = extraData
+                    ))
+                    composerViewModel.addSelectedAttachments(attachments)
+                },
+            )
 
-                            Text(
-                                modifier = Modifier.padding(start = 4.dp),
-                                text = "Type something",
-                                color = ChatTheme.colors.textLowEmphasis
-                            )
+            MessageComposer( // 1 - Use our MessageComposer as the base component
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .wrapContentHeight(),
+                viewModel = composerViewModel,
+                integrations = {}, // 2 - Remove integrations from the composer
+                input = { inputState ->// 3 - Add a custom message input
+                    MessageInput(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(7f)
+                            .padding(start = 8.dp)
+                            .align(Alignment.CenterVertically),
+                        messageComposerState = inputState,
+                        onValueChange = { composerViewModel.setMessageInput(it) },
+                        onAttachmentRemoved = { composerViewModel.removeSelectedAttachment(it) },
+                        label = { // 4 - Override the label to show a custom icon and a text
+                            Row(
+                                Modifier.wrapContentWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Keyboard,
+                                    contentDescription = null,
+                                    tint = ChatTheme.colors.textLowEmphasis
+                                )
+
+                                Text(
+                                    modifier = Modifier.padding(start = 4.dp),
+                                    text = "Type something",
+                                    color = ChatTheme.colors.textLowEmphasis
+                                )
+                            }
                         }
-                    }
-                )
-            }
-        )
+                    )
+                }
+            )
+        }
     }
 
     // 3 - Create an intent to start this Activity, with a given channelId
