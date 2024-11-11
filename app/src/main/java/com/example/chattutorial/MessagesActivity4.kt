@@ -127,6 +127,8 @@ class MessagesActivity4 : ComponentActivity() {
                         attachmentsPickerViewModel.changeAttachmentState(false)
                         composerViewModel.addSelectedAttachments(attachments)
                     },
+                    onTabClick = { _, _ ->
+                    },
                     onDismiss = {
                         attachmentsPickerViewModel.changeAttachmentState(false)
                         attachmentsPickerViewModel.dismissAttachments()
